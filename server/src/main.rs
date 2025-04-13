@@ -4,6 +4,12 @@ use std::convert::Infallible;
 use tokio::fs;
 use std::path::Path;
 
+#[derive(Deserialize, Serialize)]
+struct FormData {
+    name: String,
+    email: String,
+    message: String,
+}
 
 async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     match (req.method(), req.uri().path()) {
@@ -35,8 +41,26 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
     }
 }
 
+        (&Method::POST, "/submit") => {
+    let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
+
+    match serde_json::from_slice::<FormData>(&whole_body) {
+        Ok(form_data) => {
+            let response_msg = format!("Received: Name: {}, Email: {}, Message: {}", 
+                                       form_data.name, form_data.email, form_data.message);
+            Ok(Response::new(Body::from(response_msg)))
+        }
+        Err(_) => {
+            Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from("Invalid form data"))
+                .unwrap())
+        }
     }
 }
+
+
+
 
 #[tokio::main]
 async fn main() {
