@@ -19,6 +19,16 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
                         .body(Body::from("Error reading file"))
                         .unwrap()),
                 }
+            } else {
+                Ok(Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("404 - Not Found"))
+                    .unwrap())
+            }
+        }
+        _ => {
+            Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
                 .body(Body::from("405 - Method Not Allowed"))
                 .unwrap())
         }
