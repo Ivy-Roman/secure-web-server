@@ -5,7 +5,16 @@
     <title>Rust Form Submission</title>
 </head>
 <body>
+
+    <!-- Page heading -->
     <h1>Contact Us</h1>
+
+    <!-- 
+        Contact form.
+        - ID is used to reference the form in JavaScript
+        - Each field has a unique ID for later retrieval
+        - 'required' ensures the user must fill out each field
+    -->
     <form id="contactForm">
         <label>Name:</label><br>
         <input type="text" id="name" required><br><br>
@@ -18,31 +27,51 @@
 
         <button type="submit">Send</button>
     </form>
+
+    <!-- 
+        Paragraph to display the server's response (e.g. success or error message)
+        This will be updated by JavaScript after the form is submitted.
+    -->
     <p id="response"></p>
+
+    <!-- 
+        JavaScript block that:
+        - Listens for form submission
+        - Prevents default form behavior (refreshing the page)
+        - Collects form data
+        - Sends a POST request to the backend in JSON format
+        - Displays the server's response in the <p> tag
+    -->
+    <script>
+        // Reference to the form and response text element
+        const form = document.getElementById("contactForm");
+        const responseText = document.getElementById("response");
+
+        // When the form is submitted
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault(); // Stop the page from reloading
+
+            // Gather data from the input fields
+            const data = {
+                name: document.getElementById("name").value,
+                email: document.getElementById("email").value,
+                message: document.getElementById("message").value,
+            };
+
+            // Send the form data to the backend using fetch API
+            const res = await fetch("/submit", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json", // Required by backend
+                },
+                body: JSON.stringify(data), // Convert data to JSON string
+            });
+
+            // Read the response and display it on the page
+            const text = await res.text();
+            responseText.textContent = text;
+        });
+    </script>
+
 </body>
 </html>
-<script>
-    const form = document.getElementById("contactForm");
-    const responseText = document.getElementById("response");
-
-    form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        const data = {
-            name: document.getElementById("name").value,
-            email: document.getElementById("email").value,
-            message: document.getElementById("message").value,
-        };
-
-        const res = await fetch("/submit", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(data),
-        });
-
-        const text = await res.text();
-        responseText.textContent = text;
-    });
-</script>
