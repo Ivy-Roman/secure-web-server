@@ -25,7 +25,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
 
         // Serve static files
         (&Method::GET, path) => {
-            let file_path = format!(".{}", path);
+            let file_path = format!("./static{}", path);
             if Path::new(&file_path).exists() {
                 match fs::read_to_string(file_path).await {
                     Ok(contents) => Ok(Response::new(Body::from(contents))),
