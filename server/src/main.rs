@@ -4,27 +4,12 @@ use std::convert::Infallible;
 use tokio::fs;
 use std::path::Path;
 
+// ... imports ...
+
 async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
             Ok(Response::new(Body::from("Welcome to the Secure Rust Server!")))
-        }
-        (&Method::GET, path) => {
-            let file_path = format!(".{}", path);
-            if Path::new(&file_path).exists() {
-                match fs::read_to_string(file_path).await {
-                    Ok(contents) => Ok(Response::new(Body::from(contents))),
-                    Err(_) => Ok(Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Body::from("Error reading file"))
-                        .unwrap()),
-                }
-            } else {
-                Ok(Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("404 - Not Found"))
-                    .unwrap())
-            }
         }
         _ => {
             Ok(Response::builder()
@@ -47,4 +32,5 @@ async fn main() {
         eprintln!("Server error: {}", e);
     }
 }
+
 
