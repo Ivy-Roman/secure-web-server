@@ -1,0 +1,148 @@
+# COMPILE_INSTRUCTIONS.txt
+# Project: Secure Web Server in Rust
+# Target Platform: Fedora Linux (tested on Fedora Workstation 39+)
+# Submission Type: ZIP archive (not hosted on GitHub)
+# Author: [Your Name]
+# Date: [Submission Date]
+
+
+=======================================
+1. SYSTEM REQUIREMENTS
+=======================================
+
+This project is built using the Rust programming language and relies on a few system dependencies:
+
+- Rust toolchain (via rustup)
+- GCC or Clang (required for linking native dependencies)
+- Git (optional, for version control)
+- Cargo (included with Rust)
+
+Ensure your system is up to date:
+$ sudo dnf update -y
+
+
+=======================================
+2. INSTALL RUST TOOLCHAIN
+=======================================
+
+Install Rust using rustup (the recommended method):
+
+$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+Then reload your shell:
+
+$ source $HOME/.cargo/env
+
+Verify installation:
+
+$ rustc --version
+$ cargo --version
+
+
+=======================================
+3. INSTALL REQUIRED COMPILER TOOLS (GCC)
+=======================================
+
+Rust needs a native system linker. Install GCC:
+
+$ sudo dnf groupinstall "Development Tools" -y
+$ sudo dnf install gcc -y
+
+
+=======================================
+4. EXTRACT THE SUBMISSION ZIP FILE
+=======================================
+
+After downloading and unzipping the project:
+
+You should see a folder with this structure:
+
+.
+├── src/
+│   └── main.rs
+├── static/
+│   └── form.html
+├── Cargo.toml
+├── Cargo.lock
+├── COMPILE_INSTRUCTIONS.txt
+├── README.md
+└── git_log_summary.txt
+
+
+=======================================
+5. BUILD THE PROJECT
+=======================================
+
+Inside the unzipped folder, run:
+
+$ cargo build --release
+
+This creates an optimized binary at:
+target/release/secure_server
+
+
+=======================================
+6. RUN THE SERVER
+=======================================
+
+Start the server with logging:
+
+$ RUST_LOG=info cargo run --release
+
+You should see:
+
+Server running on http://127.0.0.1:8080
+
+
+=======================================
+7. TEST IN YOUR BROWSER
+=======================================
+
+Open your browser and go to:
+
+http://127.0.0.1:8080
+
+You should see a web form. Fill it out and click "Send".
+
+Submissions are saved to:
+form_submissions.txt
+
+
+=======================================
+8. TROUBLESHOOTING
+=======================================
+
+Error: linker `cc` not found  
+→ Run: `sudo dnf install gcc -y`
+
+form.html not loading  
+→ Make sure `static/form.html` exists
+
+Clear and rebuild:
+
+$ cargo clean && cargo build
+
+
+=======================================
+9. OPTIONAL: MANUAL BINARY EXECUTION
+=======================================
+
+You can also run the compiled binary directly:
+
+$ cargo build --release
+$ ./target/release/secure_server
+
+
+=======================================
+10. NOTES
+=======================================
+
+- This project is a local prototype. TLS/HTTPS is not required.
+- Logging output is visible in the terminal when running the server.
+- The project is designed with security best practices in mind (input validation, file access, and logging).
+
+
+=======================================
+END OF FILE
+=======================================
+
