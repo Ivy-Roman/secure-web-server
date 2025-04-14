@@ -18,97 +18,80 @@ struct FormData {
 // Function to handle requests
 async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     match (req.method(), req.uri().path()) {
-        // GET request for the homepage
-        (&Method::GET, "/") => {
-            Ok(Response::new(Body::from("Welcome to the Secure Rust Server!")))
-        }
-
-        // Serve static files
+        // Serve static files securely
         (&Method::GET, path) => {
-            let file_path = format!("./static{}", path);
-            if Path::new(&file_path).exists() {
-                match fs::read_to_string(file_path).await {
-                    Ok(contents) => Ok(Response::new(Body::from(contents))),
-                    Err(_) => Ok(Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Body::from("Error reading file"))
-                        .unwrap()),
+            let safe_path = sanitize_path(path);
+
+            match safe_path {
+                Some(path) => {
+                    match fs::read_to_string(path).await {
+                        Ok(contents) => Ok(Response::new(Body::from(contents))),
+                        Err(_) => Ok(Response::builder()
+                            .status(StatusCode::NOT_FOUND)
+                            .body(Body::from("404 - File not found"))
+                            .unwrap()),
+                    }
                 }
-            } else {
-                Ok(Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("404 - Not Found"))
-                    .unwrap())
+                None => Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Body::from("400 - Invalid path"))
+                    .unwrap()),
             }
         }
 
-        // Handle POST request for form submission
+        // Handle form submission via POST
         (&Method::POST, "/submit") => {
-            let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
+            let full_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
 
-            // Deserialize JSON form data
-            match serde_json::from_slice::<FormData>(&whole_body) {
+            match serde_json::from_slice::<FormData>(&full_body) {
                 Ok(form_data) => {
+                    // Validate required fields
                     if form_data.name.trim().is_empty()
-    || form_data.email.trim().is_empty()
-    || form_data.message.trim().is_empty()
-{
-    return Ok(Response::builder()
-        .status(StatusCode::BAD_REQUEST)
-        .body(Body::from("All fields are required."))
-        .unwrap());
-}
+                        || form_data.email.trim().is_empty()
+                        || form_data.message.trim().is_empty()
+                    {
+                        return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from("All fields are required."))
+                            .unwrap());
+                    }
 
-if !form_data.email.contains('@') {
-    return Ok(Response::builder()
-        .status(StatusCode::BAD_REQUEST)
-        .body(Body::from("Invalid email format."))
-        .unwrap());
-}
+                    // Validate email format
+                    if !form_data.email.contains('@') {
+                        return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from("Invalid email format."))
+                            .unwrap());
+                    }
 
-
-                    let response_msg = format!("Received: Name: {}, Email: {}, Message: {}", 
-                                               form_data.name, form_data.email, form_data.message);
-                    
-                    // Save form data to a file
-                    let mut file = tokio::fs::OpenOptions::new()
-                        .append(true)
+                    // Save valid submission to file
+                    let mut file = fs::OpenOptions::new()
                         .create(true)
+                        .append(true)
                         .open("form_submissions.txt")
                         .await
                         .unwrap();
-                    file.write_all(format!("{:?}\n", form_data).as_bytes()).await.unwrap();
 
-                    Ok(Response::new(Body::from(response_msg)))
+                    let log_entry = format!("{:?}\n", form_data);
+                    file.write_all(log_entry.as_bytes()).await.unwrap();
+
+                    Ok(Response::new(Body::from("Thank you! Your message was received.")))
                 }
-                Err(_) => {
-                    Ok(Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .body(Body::from("Invalid form data"))
-                        .unwrap())
-                }
+
+                // Invalid JSON format
+                Err(_) => Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Body::from("Invalid form submission"))
+                    .unwrap()),
             }
         }
 
+        // Handle all other routes
         _ => {
             Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("405 - Method Not Allowed"))
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("404 - Not Found"))
                 .unwrap())
         }
     }
 }
-
-#[tokio::main]
-async fn main() {
-    let addr = ([127, 0, 0, 1], 8080).into();
-    let service = make_service_fn(|_| async { Ok::<_, Infallible>(service_fn(handle_request)) });
-
-    let server = Server::bind(&addr).serve(service);
-
-    println!("Server running on http://{}", addr);
-    if let Err(e) = server.await {
-        eprintln!("Server error: {}", e);
-    }
-}
-
