@@ -9,8 +9,9 @@ use regex::Regex;
 use log::{info, warn, error};
 use env_logger;
 use std::os::unix::fs::OpenOptionsExt;
+use hyper::header::{HeaderValue, CONTENT_TYPE};
 
-// Define a struct for form data
+// Form data structure
 #[derive(Deserialize, Serialize, Debug)]
 struct FormData {
     name: String,
@@ -18,9 +19,9 @@ struct FormData {
     message: String,
 }
 
+// Validation logic
 impl FormData {
     fn is_valid(&self) -> Result<(), String> {
-        // Check for empty fields
         if self.name.trim().is_empty()
             || self.email.trim().is_empty()
             || self.message.trim().is_empty()
@@ -28,24 +29,23 @@ impl FormData {
             return Err("All fields are required.".into());
         }
 
-        // Check for max lengths
         if self.name.len() > 100 {
             return Err("Name is too long (max 100 characters).".into());
         }
+
         if self.email.len() > 100 {
             return Err("Email is too long (max 100 characters).".into());
         }
+
         if self.message.len() > 1000 {
             return Err("Message is too long (max 1000 characters).".into());
         }
 
-        // Validate email format with regex
         let email_regex = Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").unwrap();
         if !email_regex.is_match(&self.email) {
             return Err("Invalid email format.".into());
         }
 
-        // Basic XSS protection
         if self.message.contains("<script>") {
             return Err("Message contains potentially unsafe content.".into());
         }
@@ -54,7 +54,16 @@ impl FormData {
     }
 }
 
-// Sanitize path to avoid directory traversal
+// Adds standard security headers to responses
+fn with_security_headers(mut response: Response<Body>) -> Response<Body> {
+    let headers = response.headers_mut();
+    headers.insert("Content-Security-Policy", HeaderValue::from_static("default-src 'self'"));
+    headers.insert("X-Content-Type-Options", HeaderValue::from_static("nosniff"));
+    headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
+    response
+}
+
+// Prevents directory traversal, ensures access is within /static
 fn sanitize_path(request_path: &str) -> Option<std::path::PathBuf> {
     let rel_path = if request_path == "/" {
         "static/form.html"
@@ -77,54 +86,51 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
     info!("Incoming request: {} {}", method, uri);
 
     match (method, uri) {
-        // Serve static files
+        // GET: Serve static files
         (&Method::GET, path) => {
             let safe_path = sanitize_path(path);
             match safe_path {
                 Some(path) => match fs::read_to_string(path).await {
-                    Ok(contents) => Ok(Response::new(Body::from(contents))),
+                    Ok(contents) => Ok(with_security_headers(Response::new(Body::from(contents)))),
                     Err(e) => {
                         error!("Failed to read file: {:?}", e);
-                        Ok(Response::builder()
+                        Ok(with_security_headers(Response::builder()
                             .status(StatusCode::INTERNAL_SERVER_ERROR)
                             .body(Body::from("500 - Internal Server Error"))
-                            .unwrap())
+                            .unwrap()))
                     }
                 },
                 None => {
                     warn!("Attempted to access invalid path: {}", path);
-                    Ok(Response::builder()
+                    Ok(with_security_headers(Response::builder()
                         .status(StatusCode::BAD_REQUEST)
                         .body(Body::from("400 - Invalid path"))
-                        .unwrap())
+                        .unwrap()))
                 }
             }
         }
 
-        // Handle form submission
+        // POST: Form submission handler
         (&Method::POST, "/submit") => {
+            // Enforce Content-Type
+            if req.headers().get("content-type") != Some(&"application/json".parse().unwrap()) {
+                warn!("Unsupported content type: {:?}", req.headers().get("content-type"));
+                return Ok(with_security_headers(Response::builder()
+                    .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+                    .body(Body::from("Expected application/json"))
+                    .unwrap()));
+            }
 
-            //Reject if Content-Type is not application/json
-if req.headers().get("content-type") != Some(&"application/json".parse().unwrap()) {
-    warn!("Unsupported content type: {:?}", req.headers().get("content-type"));
-    return Ok(Response::builder()
-        .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
-        .body(Body::from("Expected application/json"))
-        .unwrap());
-}
-
-
-
+            // Limit body size
             let full_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
-            let max_size = 10 * 1024; // 10 KB
-if full_body.len() > max_size {
-    warn!("Rejected large payload: {} bytes", full_body.len());
-    return Ok(Response::builder()
-        .status(StatusCode::PAYLOAD_TOO_LARGE)
-        .body(Body::from("Payload too large"))
-        .unwrap());
-}
-
+            let max_size = 10 * 1024;
+            if full_body.len() > max_size {
+                warn!("Rejected large payload: {} bytes", full_body.len());
+                return Ok(with_security_headers(Response::builder()
+                    .status(StatusCode::PAYLOAD_TOO_LARGE)
+                    .body(Body::from("Payload too large"))
+                    .unwrap()));
+            }
 
             match serde_json::from_slice::<FormData>(&full_body) {
                 Ok(form_data) => {
@@ -132,10 +138,10 @@ if full_body.len() > max_size {
 
                     if let Err(msg) = form_data.is_valid() {
                         warn!("Validation error: {}", msg);
-                        return Ok(Response::builder()
+                        return Ok(with_security_headers(Response::builder()
                             .status(StatusCode::BAD_REQUEST)
                             .body(Body::from(msg))
-                            .unwrap());
+                            .unwrap()));
                     }
 
                     let mut file = fs::OpenOptions::new()
@@ -156,30 +162,33 @@ if full_body.len() > max_size {
                         info!("Successfully saved submission for {}", form_data.email);
                     }
 
-                    Ok(Response::new(Body::from("Thank you! Your message was received.")))
+                    Ok(with_security_headers(Response::new(Body::from(
+                        "Thank you! Your message was received.",
+                    ))))
                 }
+
                 Err(e) => {
                     warn!("Failed to parse JSON body: {:?}", e);
-                    Ok(Response::builder()
+                    Ok(with_security_headers(Response::builder()
                         .status(StatusCode::BAD_REQUEST)
                         .body(Body::from("Invalid form submission"))
-                        .unwrap())
+                        .unwrap()))
                 }
             }
         }
 
-        // All other requests
+        // All other routes
         _ => {
             warn!("Unknown route requested: {}", uri);
-            Ok(Response::builder()
+            Ok(with_security_headers(Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::from("404 - Not Found"))
-                .unwrap())
+                .unwrap()))
         }
     }
 }
 
-// Entry point
+// Application entry point
 #[tokio::main]
 async fn main() {
     env_logger::init();
