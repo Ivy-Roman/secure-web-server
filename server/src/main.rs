@@ -59,6 +59,14 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
         .unwrap());
 }
 
+if !form_data.email.contains('@') {
+    return Ok(Response::builder()
+        .status(StatusCode::BAD_REQUEST)
+        .body(Body::from("Invalid email format."))
+        .unwrap());
+}
+
+
                     let response_msg = format!("Received: Name: {}, Email: {}, Message: {}", 
                                                form_data.name, form_data.email, form_data.message);
                     
