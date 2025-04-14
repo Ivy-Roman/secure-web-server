@@ -468,6 +468,7 @@ dependencies = [
  "env_logger",
  "hyper",
  "log",
+ "regex",
  "serde",
  "serde_json",
  "tokio",

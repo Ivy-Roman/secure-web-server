@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::io::AsyncWriteExt;
 use regex::Regex;
+use log::{info, warn, error};
 
 // Define a struct for form data
 #[derive(Deserialize, Serialize, Debug)]
@@ -119,4 +120,30 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
         }
     }
 }
+
+#[tokio::main]
+async fn main() {
+    // Initialize logger before anything else
+    env_logger::init();
+    info!("Server starting on http://127.0.0.1:8080");
+
+    // Define server address
+    let addr = ([127, 0, 0, 1], 8080).into();
+
+    // Create the service using the request handler
+    let service = make_service_fn(|_| async {
+        Ok::<_, Infallible>(service_fn(handle_request))
+    });
+
+    // Start the Hyper server
+    let server = Server::bind(&addr).serve(service);
+
+    println!("Server running on http://{}", addr);
+
+    // Await the server and handle any fatal errors
+    if let Err(e) = server.await {
+        error!("Server error: {}", e);
+    }
+}
+
 
