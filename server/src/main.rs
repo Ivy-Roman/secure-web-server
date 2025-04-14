@@ -107,7 +107,13 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             let safe_path = sanitize_path(path);
             match safe_path {
                 Some(path) => match fs::read_to_string(path).await {
-                    Ok(contents) => Ok(with_security_headers(Response::new(Body::from(contents)))),
+                    Ok(contents) => {let response = Response::builder()
+    .status(StatusCode::OK)
+    .header("Content-Type", "text/html; charset=utf-8")
+    .body(Body::from(contents))
+    .unwrap();
+
+Ok(with_security_headers(response))},
                     Err(e) => {
                         error!("Failed to read file: {:?}", e);
                         Ok(with_security_headers(Response::builder()
