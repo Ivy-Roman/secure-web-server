@@ -103,6 +103,18 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
 
         // Handle form submission
         (&Method::POST, "/submit") => {
+
+            //Reject if Content-Type is not application/json
+if req.headers().get("content-type") != Some(&"application/json".parse().unwrap()) {
+    warn!("Unsupported content type: {:?}", req.headers().get("content-type"));
+    return Ok(Response::builder()
+        .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+        .body(Body::from("Expected application/json"))
+        .unwrap());
+}
+
+
+
             let full_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
             let max_size = 10 * 1024; // 10 KB
 if full_body.len() > max_size {
