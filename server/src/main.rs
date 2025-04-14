@@ -104,6 +104,15 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
         // Handle form submission
         (&Method::POST, "/submit") => {
             let full_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
+            let max_size = 10 * 1024; // 10 KB
+if full_body.len() > max_size {
+    warn!("Rejected large payload: {} bytes", full_body.len());
+    return Ok(Response::builder()
+        .status(StatusCode::PAYLOAD_TOO_LARGE)
+        .body(Body::from("Payload too large"))
+        .unwrap());
+}
+
 
             match serde_json::from_slice::<FormData>(&full_body) {
                 Ok(form_data) => {
