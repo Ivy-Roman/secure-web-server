@@ -49,6 +49,16 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             // Deserialize JSON form data
             match serde_json::from_slice::<FormData>(&whole_body) {
                 Ok(form_data) => {
+                    if form_data.name.trim().is_empty()
+    || form_data.email.trim().is_empty()
+    || form_data.message.trim().is_empty()
+{
+    return Ok(Response::builder()
+        .status(StatusCode::BAD_REQUEST)
+        .body(Body::from("All fields are required."))
+        .unwrap());
+}
+
                     let response_msg = format!("Received: Name: {}, Email: {}, Message: {}", 
                                                form_data.name, form_data.email, form_data.message);
                     
