@@ -1,17 +1,29 @@
+// Import core dependencies for building the async HTTP server
 use hyper::{Body, Request, Response, Server, Method, StatusCode};
 use hyper::service::{make_service_fn, service_fn};
 use std::convert::Infallible;
+
+// Async file operations
 use tokio::fs;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
+use std::os::unix::fs::OpenOptionsExt;
+
+// For form data serialization/deserialization
+use serde::{Deserialize, Serialize};
+
+// Regex for advanced email validation
 use regex::Regex;
+
+// Structured logging macros
 use log::{info, warn, error};
 use env_logger;
-use std::os::unix::fs::OpenOptionsExt;
+
+// Used to set custom HTTP response headers
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 
-// Form data structure
+/// Data structure representing the form submission fields.
+/// This struct is automatically serialized/deserialized from JSON.
 #[derive(Deserialize, Serialize, Debug)]
 struct FormData {
     name: String,
@@ -19,9 +31,10 @@ struct FormData {
     message: String,
 }
 
-// Validation logic
 impl FormData {
+    /// Validate form fields for correctness, length, format, and safety.
     fn is_valid(&self) -> Result<(), String> {
+        // Check required fields
         if self.name.trim().is_empty()
             || self.email.trim().is_empty()
             || self.message.trim().is_empty()
@@ -29,6 +42,7 @@ impl FormData {
             return Err("All fields are required.".into());
         }
 
+        // Enforce length limits to prevent abuse
         if self.name.len() > 100 {
             return Err("Name is too long (max 100 characters).".into());
         }
@@ -41,11 +55,13 @@ impl FormData {
             return Err("Message is too long (max 1000 characters).".into());
         }
 
+        // Validate proper email format using regex
         let email_regex = Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").unwrap();
         if !email_regex.is_match(&self.email) {
             return Err("Invalid email format.".into());
         }
 
+        // Basic script injection protection
         if self.message.contains("<script>") {
             return Err("Message contains potentially unsafe content.".into());
         }
@@ -54,7 +70,7 @@ impl FormData {
     }
 }
 
-// Adds standard security headers to responses
+/// Adds standard HTTP security headers to the response to prevent attacks.
 fn with_security_headers(mut response: Response<Body>) -> Response<Body> {
     let headers = response.headers_mut();
     headers.insert("Content-Security-Policy", HeaderValue::from_static("default-src 'self'"));
@@ -63,7 +79,7 @@ fn with_security_headers(mut response: Response<Body>) -> Response<Body> {
     response
 }
 
-// Prevents directory traversal, ensures access is within /static
+/// Sanitizes the requested path to prevent directory traversal attacks.
 fn sanitize_path(request_path: &str) -> Option<std::path::PathBuf> {
     let rel_path = if request_path == "/" {
         "static/form.html"
@@ -79,14 +95,14 @@ fn sanitize_path(request_path: &str) -> Option<std::path::PathBuf> {
     }
 }
 
-// Main request handler
+/// Core HTTP request handler for both GET and POST requests.
 async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let method = req.method();
     let uri = req.uri().path();
     info!("Incoming request: {} {}", method, uri);
 
     match (method, uri) {
-        // GET: Serve static files
+        // Serve static files for GET requests
         (&Method::GET, path) => {
             let safe_path = sanitize_path(path);
             match safe_path {
@@ -110,9 +126,9 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             }
         }
 
-        // POST: Form submission handler
+        // Handle form submissions via POST
         (&Method::POST, "/submit") => {
-            // Enforce Content-Type
+            // Check content-type header
             if req.headers().get("content-type") != Some(&"application/json".parse().unwrap()) {
                 warn!("Unsupported content type: {:?}", req.headers().get("content-type"));
                 return Ok(with_security_headers(Response::builder()
@@ -121,7 +137,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
                     .unwrap()));
             }
 
-            // Limit body size
+            // Read and limit the body size to 10KB
             let full_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
             let max_size = 10 * 1024;
             if full_body.len() > max_size {
@@ -132,10 +148,12 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
                     .unwrap()));
             }
 
+            // Attempt to parse JSON body
             match serde_json::from_slice::<FormData>(&full_body) {
                 Ok(form_data) => {
                     info!("Parsed form data: {:?}", form_data);
 
+                    // Validate input fields
                     if let Err(msg) = form_data.is_valid() {
                         warn!("Validation error: {}", msg);
                         return Ok(with_security_headers(Response::builder()
@@ -144,10 +162,11 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
                             .unwrap()));
                     }
 
+                    // Save submission securely to file
                     let mut file = fs::OpenOptions::new()
                         .create(true)
                         .append(true)
-                        .mode(0o600)
+                        .mode(0o600) // Secure file permissions (rw-------)
                         .open("form_submissions.txt")
                         .await
                         .unwrap_or_else(|e| {
@@ -177,7 +196,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             }
         }
 
-        // All other routes
+        // Reject all other methods and paths
         _ => {
             warn!("Unknown route requested: {}", uri);
             Ok(with_security_headers(Response::builder()
@@ -188,24 +207,28 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
     }
 }
 
-// Application entry point
+/// The application's entry point. Initializes logging and starts the server.
 #[tokio::main]
 async fn main() {
+    // Start structured logging (info, warn, error)
     env_logger::init();
     info!("Secure web server starting...");
 
+    // Bind server to localhost:8080
     let addr = ([127, 0, 0, 1], 8080).into();
 
+    // Create the Hyper service from the request handler
     let service = make_service_fn(|_| async {
         Ok::<_, Infallible>(service_fn(handle_request))
     });
 
+    // Run the server
     let server = Server::bind(&addr).serve(service);
 
     println!("Server running on http://{}", addr);
 
+    // Graceful shutdown with error logging
     if let Err(e) = server.await {
         error!("Server error: {}", e);
     }
 }
-
