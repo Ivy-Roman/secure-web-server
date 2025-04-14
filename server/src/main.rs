@@ -82,7 +82,7 @@ fn with_security_headers(mut response: Response<Body>) -> Response<Body> {
 /// Sanitizes the requested path to prevent directory traversal attacks.
 fn sanitize_path(request_path: &str) -> Option<std::path::PathBuf> {
     let rel_path = if request_path == "/" {
-        "static/form.html"
+        "form.html"
     } else {
         &request_path[1..]
     };
