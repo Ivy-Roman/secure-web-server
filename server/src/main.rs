@@ -4,10 +4,11 @@ use std::convert::Infallible;
 use tokio::fs;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tokio::io::AsyncWriteExt;
 use regex::Regex;
 use log::{info, warn, error};
+use env_logger;
+use std::os::unix::fs::OpenOptionsExt;
 
 // Define a struct for form data
 #[derive(Deserialize, Serialize, Debug)]
@@ -38,14 +39,13 @@ impl FormData {
             return Err("Message is too long (max 1000 characters).".into());
         }
 
-        // Validate email format
-        let email_regex =
-            Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").unwrap();
+        // Validate email format with regex
+        let email_regex = Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").unwrap();
         if !email_regex.is_match(&self.email) {
             return Err("Invalid email format.".into());
         }
 
-        // Optional: Block basic script injection patterns
+        // Basic XSS protection
         if self.message.contains("<script>") {
             return Err("Message contains potentially unsafe content.".into());
         }
@@ -54,65 +54,102 @@ impl FormData {
     }
 }
 
+// Sanitize path to avoid directory traversal
+fn sanitize_path(request_path: &str) -> Option<std::path::PathBuf> {
+    let rel_path = if request_path == "/" {
+        "static/form.html"
+    } else {
+        &request_path[1..]
+    };
+
+    let path = Path::new("static").join(rel_path);
+    if path.exists() && path.starts_with("static") {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+// Main request handler
 async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    match (req.method(), req.uri().path()) {
-        // Handle GET requests (serve static files)
+    let method = req.method();
+    let uri = req.uri().path();
+    info!("Incoming request: {} {}", method, uri);
+
+    match (method, uri) {
+        // Serve static files
         (&Method::GET, path) => {
             let safe_path = sanitize_path(path);
-
             match safe_path {
-                Some(path) => {
-                    match fs::read_to_string(path).await {
-                        Ok(contents) => Ok(Response::new(Body::from(contents))),
-                        Err(_) => Ok(Response::builder()
-                            .status(StatusCode::NOT_FOUND)
-                            .body(Body::from("404 - File not found"))
-                            .unwrap()),
+                Some(path) => match fs::read_to_string(path).await {
+                    Ok(contents) => Ok(Response::new(Body::from(contents))),
+                    Err(e) => {
+                        error!("Failed to read file: {:?}", e);
+                        Ok(Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .body(Body::from("500 - Internal Server Error"))
+                            .unwrap())
                     }
+                },
+                None => {
+                    warn!("Attempted to access invalid path: {}", path);
+                    Ok(Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from("400 - Invalid path"))
+                        .unwrap())
                 }
-                None => Ok(Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from("400 - Invalid path"))
-                    .unwrap()),
             }
         }
 
-        // Handle POST form submissions
+        // Handle form submission
         (&Method::POST, "/submit") => {
             let full_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
 
             match serde_json::from_slice::<FormData>(&full_body) {
                 Ok(form_data) => {
-                    if let Err(msg) = form_data.is_valid() {
-    return Ok(Response::builder()
-        .status(StatusCode::BAD_REQUEST)
-        .body(Body::from(msg))
-        .unwrap());
-}
+                    info!("Parsed form data: {:?}", form_data);
 
+                    if let Err(msg) = form_data.is_valid() {
+                        warn!("Validation error: {}", msg);
+                        return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(msg))
+                            .unwrap());
                     }
 
                     let mut file = fs::OpenOptions::new()
                         .create(true)
                         .append(true)
+                        .mode(0o600)
                         .open("form_submissions.txt")
                         .await
-                        .unwrap();
+                        .unwrap_or_else(|e| {
+                            error!("Failed to open file: {:?}", e);
+                            panic!();
+                        });
 
                     let log_entry = format!("{:?}\n", form_data);
-                    file.write_all(log_entry.as_bytes()).await.unwrap();
+                    if let Err(e) = file.write_all(log_entry.as_bytes()).await {
+                        error!("Failed to write to file: {:?}", e);
+                    } else {
+                        info!("Successfully saved submission for {}", form_data.email);
+                    }
 
                     Ok(Response::new(Body::from("Thank you! Your message was received.")))
                 }
-                Err(_) => Ok(Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from("Invalid form submission"))
-                    .unwrap()),
+                Err(e) => {
+                    warn!("Failed to parse JSON body: {:?}", e);
+                    Ok(Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from("Invalid form submission"))
+                        .unwrap())
+                }
             }
         }
 
-        // Handle all other requests
+        // All other requests
         _ => {
+            warn!("Unknown route requested: {}", uri);
             Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::from("404 - Not Found"))
@@ -121,29 +158,24 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
     }
 }
 
+// Entry point
 #[tokio::main]
 async fn main() {
-    // Initialize logger before anything else
     env_logger::init();
-    info!("Server starting on http://127.0.0.1:8080");
+    info!("Secure web server starting...");
 
-    // Define server address
     let addr = ([127, 0, 0, 1], 8080).into();
 
-    // Create the service using the request handler
     let service = make_service_fn(|_| async {
         Ok::<_, Infallible>(service_fn(handle_request))
     });
 
-    // Start the Hyper server
     let server = Server::bind(&addr).serve(service);
 
     println!("Server running on http://{}", addr);
 
-    // Await the server and handle any fatal errors
     if let Err(e) = server.await {
         error!("Server error: {}", e);
     }
 }
-
 
