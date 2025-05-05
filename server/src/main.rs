@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use tokio::fs;
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
-use std::os::unix::fs::OpenOptionsExt;
+use hyper::header::{HeaderValue};
 
 // For form data serialization/deserialization
 use serde::{Deserialize, Serialize};
@@ -18,9 +18,6 @@ use regex::Regex;
 // Structured logging macros
 use log::{info, warn, error};
 use env_logger;
-
-// Used to set custom HTTP response headers
-use hyper::header::{HeaderValue, CONTENT_TYPE};
 
 /// Data structure representing the form submission fields.
 /// This struct is automatically serialized/deserialized from JSON.
