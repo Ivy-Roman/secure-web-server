@@ -1,0 +1,29 @@
+# Rust build artifacts
+/target/
+
+# Output files
+form_submissions.txt
+
+# Backup files
+*.swp
+*.swo
+*.bak
+*~
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.code-workspace
+
+# Cargo package files (if packaging crate)
+/Cargo.lock
+
+# Ignore zip archives (if you generate one for submission)
+*.zip

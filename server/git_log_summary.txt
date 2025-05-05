@@ -1,0 +1,33 @@
+14ea066 | 2025-04-14 | created a readme file
+db6cd75 | 2025-04-14 | added a compile instructions document
+7d5d732 | 2025-04-14 | Fix default route to serve form.html on /
+d026c0e | 2025-04-14 | Fix match arm syntax and set proper Content-Type for HTML
+8575a46 | 2025-04-14 | added internal documentation
+bcb33a5 | 2025-04-14 | Add HTTP security headers to protect against XSS and MIME attacks
+9837cf8 | 2025-04-14 | Enforce Content-Type: application/json for form submissions
+b4fcca4 | 2025-04-14 | Limited request body size to 10KB to prevent abuse
+b0e90e6 | 2025-04-14 | deleted duplicate dependencies
+b3c435a | 2025-04-14 | Added structured logging with env_logger for request tracking and error reporting
+a0be051 | 2025-04-14 | Add main function to launch server with logging initialization
+6d3974c | 2025-04-14 | implemented formdata with full field and format validation
+914efab | 2025-04-14 | Add regex crate for advanced email validation
+89bbba5 | 2025-04-14 | added dependencies to enable logging
+0767b48 | 2025-04-14 | Refactor validation logic into FormData::is_valid() method
+dcb0564 | 2025-04-14 | Validate that email contains '@' symbol
+705c5af | 2025-04-14 | Add input validation to reject empty name, email, or message
+2f73cda | 2025-04-14 | updated the file path logic to serve the static HTML file
+9f54ad0 | 2025-04-14 | added internal documentation to make file easy to understand
+d09c365 | 2025-04-14 | Add JavaScript for POST request and display of server response
+2b7a4a8 | 2025-04-14 | Add response paragraph to display server feedback after form submission
+55f9e26 | 2025-04-14 | Add basic HTML form with input fields for name, email, and message
+f672df9 | 2025-04-14 | created a a basic HTML form to test the POST /submit route from the browser
+d4df65a | 2025-04-14 | Save form submissions to file for persistence
+407b886 | 2025-04-14 | Add form data struct and basic POST /submit handler
+794daef | 2025-04-14 | Add static file serving for GET requests with error handling
+5a15a0a | 2025-04-14 | Initialize basic Hyper server with GET / route
+3bdd6ff | 2025-04-14 | removed duplicate key 'dependencies' in document root
+524d5a8 | 2025-04-14 | Implement static file serving with 404 and error handling
+6fd221d | 2025-04-13 | Add basic request handler with route matching for GET /
+7d56b49 | 2025-04-13 | Initialize basic Hyper server with async main function
+59200d9 | 2025-04-13 | added necessary dependencies to cargo.toml file
+c8b308b | 2025-04-13 | installed Rust and created new rust project
