@@ -1,9 +1,6 @@
 # COMPILE_INSTRUCTIONS.txt
 # Project: Secure Web Server in Rust
 # Target Platform: Fedora Linux (tested on Fedora Workstation 39+)
-# Submission Type: ZIP archive (not hosted on GitHub)
-# Author: [Your Name]
-# Date: [Submission Date]
 
 
 =======================================
